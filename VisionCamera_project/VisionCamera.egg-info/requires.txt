@@ -1,0 +1,8 @@
+opencv-python
+numpy
+Pillow
+
+[dev]
+pytest
+setuptools
+wheel

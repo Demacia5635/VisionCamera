@@ -1,0 +1,5 @@
+[console_scripts]
+visioncamera-analyze = VisionCamera.pose_analyzer:main
+visioncamera-calibrate = VisionCamera.calibration_tool:main
+visioncamera-record = VisionCamera.VideoWriter:main
+visioncamera-view = VisionCamera.viewCaptures:main

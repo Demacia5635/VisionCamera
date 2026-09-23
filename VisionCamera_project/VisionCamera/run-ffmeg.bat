@@ -1,0 +1,1 @@
+ffmpeg -rtsp_transport tcp -i "rtsp://username:password@192.168.1.100:554/stream1" -c copy -f segment -segment_time 600 -reset_timestamps 1 -strftime 1 "rec_%Y%m%d_%H%M%S.mp4"

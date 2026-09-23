@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: VisionCamera
+Version: 1.0.0
+Summary: Overhead Limelight camera pose/velocity ground truth for Demacia 2027
+Author-email: Udi Kislev <udi.kislev@gmail.com>
+Requires-Python: >=3.9
+Requires-Dist: opencv-python
+Requires-Dist: numpy
+Requires-Dist: Pillow
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: setuptools; extra == "dev"
+Requires-Dist: wheel; extra == "dev"
