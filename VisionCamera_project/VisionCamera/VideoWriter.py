@@ -25,7 +25,7 @@ from datetime import datetime
 
 import cv2
 
-DEFAULT_URL = "http://limelight.local:5800/stream.mjpg"
+DEFAULT_URL = "http://limelight-pdh.local:5800/stream.mjpg"
 
 
 def fourcc_code(c1, c2, c3, c4):
@@ -137,3 +137,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main(sys.argv[1:])
+
