@@ -33,6 +33,7 @@ import cv2
 from PIL import Image, ImageTk
 
 from .field_coords import FieldCalibration, kinematics_between, pose_from_marks
+from .undistort import LensCalibration
 
 MARK_RADIUS = 5
 RESULTS_FIELDS = [
@@ -132,12 +133,13 @@ class FramePanel(ttk.Frame):
 
 
 class PoseAnalyzer(tk.Tk):
-    def __init__(self, video_path: str, calib_path: str, results_path: str):
+    def __init__(self, video_path: str, calib_path: str, results_path: str, lens_calib_path: str | None = None):
         super().__init__()
         self.title(f"Pose analyzer - {video_path}")
         self.geometry("1300x900")
         self.video_path = video_path
         self.results_path = results_path
+        self.lens_calib = LensCalibration.load(lens_calib_path) if lens_calib_path else None
 
         self.cap = cv2.VideoCapture(video_path)
         if not self.cap.isOpened():
@@ -228,6 +230,8 @@ class PoseAnalyzer(tk.Tk):
         ok, frame = self.cap.read()
         if not ok:
             return
+        if self.lens_calib is not None:
+            frame = self.lens_calib.undistort(frame)
         self._current_frame = frame
         self._current_index = index
         t_ms = self.cap.get(cv2.CAP_PROP_POS_MSEC)
@@ -317,8 +321,12 @@ def main(argv=None):
     parser.add_argument("video", help="Recorded video file (.mp4) from VideoWriter.py")
     parser.add_argument("-c", "--calibration", default="calibration.json", help="Calibration file to use")
     parser.add_argument("-r", "--results", default="results.csv", help="CSV file to append saved results to")
+    parser.add_argument("--lens-calibration", default=None,
+                         help="lens_calibration.json (see lens_calib.py) to undistort every frame before "
+                              "marking -- required for a fisheye/wide-FOV camera; must match the calibration "
+                              "used to build --calibration")
     args = parser.parse_args(argv)
-    PoseAnalyzer(args.video, args.calibration, args.results).mainloop()
+    PoseAnalyzer(args.video, args.calibration, args.results, args.lens_calibration).mainloop()
 
 
 if __name__ == "__main__":

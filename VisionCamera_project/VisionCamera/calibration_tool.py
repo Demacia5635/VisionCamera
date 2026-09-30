@@ -21,28 +21,35 @@ import sys
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
+import cv2
+import numpy as np
 from PIL import Image, ImageTk
 
-from .field_coords import FieldCalibration
+from field_coords import FieldCalibration
+from undistort import LensCalibration
 
 GRID_STEP_M = 1.0  # meters between preview gridlines
 
 
 class CalibrationTool(tk.Tk):
-    def __init__(self, image_path: str, out_path: str):
+    def __init__(self, image_path: str, out_path: str, lens_calib_path: str | None = None):
         super().__init__()
         self.title(f"Field calibration - {image_path}")
         self.geometry("1100x750")
         self.out_path = out_path
 
         self.image = Image.open(image_path).convert("RGB")
+        if lens_calib_path:
+            lens = LensCalibration.load(lens_calib_path)
+            undistorted = lens.undistort(cv2.cvtColor(np.array(self.image), cv2.COLOR_RGB2BGR))
+            self.image = Image.fromarray(cv2.cvtColor(undistorted, cv2.COLOR_BGR2RGB))
         self.photo = None
         self.scale = 1.0
         self.offset = (0, 0)
 
         # Each entry: {"px": (x, y), "field": (fx, fy)}
         self.points: list[dict] = []
-        self.calib: FieldCalibration # | None = None
+        self.calib: FieldCalibration | None = None
         self.show_grid = tk.BooleanVar(value=False)
 
         self._build_ui()
@@ -201,8 +208,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image", help="Reference frame image showing known field points")
     parser.add_argument("-o", "--out", default="calibration.json", help="Output calibration file")
+    parser.add_argument("--lens-calibration", default="lens_calibration.json",
+                         help="lens_calibration.json (see lens_calib.py) to undistort the "
+                              "reference image before marking points -- required for a fisheye/wide-FOV camera")
     args = parser.parse_args(argv)
-    CalibrationTool(args.image, args.out).mainloop()
+    CalibrationTool(args.image, args.out, args.lens_calibration).mainloop()
 
 
 if __name__ == "__main__":

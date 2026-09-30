@@ -23,6 +23,8 @@ visioncamera-record = "VisionCamera.VideoWriter:main"
 visioncamera-view = "VisionCamera.viewCaptures:main"
 visioncamera-calibrate = "VisionCamera.calibration_tool:main"
 visioncamera-analyze = "VisionCamera.pose_analyzer:main"
+visioncamera-lens-calib = "VisionCamera.lens_calib:main"
+visioncamera-checkerboard = "VisionCamera.checkerboard:main"
 
 
 
