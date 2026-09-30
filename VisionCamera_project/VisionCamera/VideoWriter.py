@@ -71,7 +71,7 @@ def record(source, save_dir: str, save_interval: float, jpeg_quality: int, video
 
     # DSHOW opens USB cameras faster and more reliably than the default MSMF
     # backend on Windows; it doesn't apply to (and is ignored for) URL sources.
-    source = 2
+    source = 1
     width = 1440
     height  = 810
     cam_fps = 50
@@ -88,6 +88,8 @@ def record(source, save_dir: str, save_interval: float, jpeg_quality: int, video
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     if cam_fps:
         cap.set(cv2.CAP_PROP_FPS, cam_fps)
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)   # manual exposure mode
+    cap.set(cv2.CAP_PROP_EXPOSURE, -10)
 
     # Many USB cameras/DirectShow drivers report width/height as 0 until a frame
     # has actually been grabbed, so read one now and size the writer from it
