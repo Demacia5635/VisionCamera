@@ -1,0 +1,16 @@
+dev-requirements.txt
+pyproject.toml
+VisionCamera/VideoWriter.py
+VisionCamera/__init__.py
+VisionCamera/__main__.py
+VisionCamera/calibration_tool.py
+VisionCamera/field_coords.py
+VisionCamera/pose_analyzer.py
+VisionCamera/viewCaptures.py
+VisionCamera.egg-info/PKG-INFO
+VisionCamera.egg-info/SOURCES.txt
+VisionCamera.egg-info/dependency_links.txt
+VisionCamera.egg-info/entry_points.txt
+VisionCamera.egg-info/requires.txt
+VisionCamera.egg-info/top_level.txt
+tests/test_VisionCamera.py
