@@ -195,6 +195,7 @@ class CalibrationTool(tk.Tk):
             n1 = int(hi // step) + 1
             return [n * step for n in range(n0, n1 + 1)]
 
+        assert self.calib is not None
         for gx in grid_range(x0, x1, GRID_STEP_M):
             pts = [self.calib.field_to_pixel(gx, gy) for gy in (y0, y1)]
             self._draw_line(pts[0], pts[1])

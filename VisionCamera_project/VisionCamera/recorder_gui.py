@@ -122,7 +122,8 @@ class CameraReader(threading.Thread):
                 self._last_save = now
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
                 try:
-                    image_q.put_nowait((os.path.join(save_dir, f"frame_{ts}.jpg"), frame.copy()))
+                        assert image_q is not None
+                        image_q.put_nowait((os.path.join(save_dir, f"frame_{ts}.jpg"), frame.copy()))
                 except queue.Full:
                     pass
 
@@ -332,8 +333,11 @@ class RecorderGUI(tk.Tk):
     def _stop_recording(self):
         if not self.recording:
             return
+        assert self.reader is not None
         self.reader.stop_recording()
+        assert self.rec_video_q is not None
         self.rec_video_q.put(None)
+        assert self.rec_image_q is not None
         self.rec_image_q.put(None)
         for t in self.rec_threads:
             t.join()
