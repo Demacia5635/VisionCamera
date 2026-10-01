@@ -27,7 +27,10 @@ import sys
 import cv2
 import numpy as np
 
-from VideoWriter import parse_source
+try:  # python -m VisionCamera.lens_calib
+    from .VideoWriter import parse_source
+except ImportError:  # run directly, e.g. `python lens_calib.py`
+    from VideoWriter import parse_source
 
 MIN_SAMPLES = 8
 
@@ -104,7 +107,10 @@ def calibrate(source, cols: int, rows: int, square_size: float, out_path: str, m
 
     print(f"Calibrated from {len(obj_points)} samples, RMS reprojection error = {rms:.3f} px")
 
-    from undistort import LensCalibration
+    try:
+        from .undistort import LensCalibration
+    except ImportError:
+        from undistort import LensCalibration
     LensCalibration(K, D, image_size).save(out_path)
     print(f"Saved {out_path}")
 

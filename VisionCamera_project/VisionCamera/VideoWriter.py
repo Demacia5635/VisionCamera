@@ -62,19 +62,17 @@ def video_worker(video_q: queue.Queue, writer: cv2.VideoWriter):
     writer.release()  # finalizes the MP4 so it's playable
 
 
-def record(source, save_dir: str, save_interval: float, jpeg_quality: int, video_file: str,
-           width: int | None = None, height: int | None = None, cam_fps: float | None = None):
-    os.makedirs(save_dir, exist_ok=True)
+def open_camera(source, width: int | None = None, height: int | None = None, cam_fps: float | None = None):
+    """Open a camera/stream and return (cap, frame_width, frame_height, fps, first_frame).
 
-    image_q: queue.Queue = queue.Queue(maxsize=20)
-    video_q: queue.Queue = queue.Queue(maxsize=500)  # ~10 s of buffer at 50 fps
-
+    Grabs one frame immediately: both because many USB cameras/DirectShow
+    drivers report width/height as 0 until a frame has actually been read
+    (a 0x0 size is why VideoWriter.isOpened() would otherwise come back
+    False), and so callers don't have to special-case "the first frame was
+    already consumed" -- it's returned here to use or discard.
+    """
     # DSHOW opens USB cameras faster and more reliably than the default MSMF
     # backend on Windows; it doesn't apply to (and is ignored for) URL sources.
-    source = 2
-    width = 1440
-    height  = 810
-    cam_fps = 50
     if isinstance(source, int) and sys.platform == "win32":
         cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
     else:
@@ -89,20 +87,27 @@ def record(source, save_dir: str, save_interval: float, jpeg_quality: int, video
     if cam_fps:
         cap.set(cv2.CAP_PROP_FPS, cam_fps)
 
-    # Many USB cameras/DirectShow drivers report width/height as 0 until a frame
-    # has actually been grabbed, so read one now and size the writer from it
-    # directly rather than trusting cap.get() (a 0x0 frame size is why
-    # VideoWriter.isOpened() would otherwise come back False).
     ok, first_frame = cap.read()
     if not ok:
         cap.release()
         raise RuntimeError(f"Could not grab a frame from source: {source}")
     frame_height, frame_width = first_frame.shape[:2]
-    print(first_frame.shape)
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     if not fps or fps != fps or fps > 120:
-        fps = 50.0
+        fps = 25.0
+
+    return cap, frame_width, frame_height, fps, first_frame
+
+
+def record(source, save_dir: str, save_interval: float, jpeg_quality: int, video_file: str,
+           width: int | None = None, height: int | None = None, cam_fps: float | None = None):
+    os.makedirs(save_dir, exist_ok=True)
+
+    image_q: queue.Queue = queue.Queue(maxsize=20)
+    video_q: queue.Queue = queue.Queue(maxsize=500)  # ~10 s of buffer at 50 fps
+
+    cap, frame_width, frame_height, fps, first_frame = open_camera(source, width, height, cam_fps)
 
     writer = cv2.VideoWriter(video_file, fourcc_code('m', 'p', '4', 'v'), fps, (frame_width, frame_height))
     if not writer.isOpened():

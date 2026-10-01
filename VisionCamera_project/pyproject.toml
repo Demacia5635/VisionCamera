@@ -20,6 +20,7 @@ optional-dependencies = {dev = {file = ["dev-requirements.txt"]}} # add packages
 
 [project.scripts]
 visioncamera-record = "VisionCamera.VideoWriter:main"
+visioncamera-record-gui = "VisionCamera.recorder_gui:main"
 visioncamera-view = "VisionCamera.viewCaptures:main"
 visioncamera-calibrate = "VisionCamera.calibration_tool:main"
 visioncamera-analyze = "VisionCamera.pose_analyzer:main"

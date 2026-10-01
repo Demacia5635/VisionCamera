@@ -25,8 +25,12 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 
-from field_coords import FieldCalibration
-from undistort import LensCalibration
+try:  # python -m VisionCamera.calibration_tool
+    from .field_coords import FieldCalibration
+    from .undistort import LensCalibration
+except ImportError:  # run directly, e.g. `python calibration_tool.py`
+    from field_coords import FieldCalibration
+    from undistort import LensCalibration
 
 GRID_STEP_M = 1.0  # meters between preview gridlines
 

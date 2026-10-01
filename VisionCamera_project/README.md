@@ -25,7 +25,8 @@ workflow above:
 
 | File | Purpose |
 |---|---|
-| `VisionCamera/VideoWriter.py` | Records the camera stream to MP4 + periodic JPEG snapshots. Refactored into a proper CLI (`--url`, `--save-dir`, `--save-interval`, `--jpeg-quality`, `--out`); default URL updated to a Limelight-style MJPEG endpoint. *(existing file, refactored)* |
+| `VisionCamera/VideoWriter.py` | Headless/CLI recorder: camera stream to MP4 + periodic JPEG snapshots. `open_camera()` (shared camera-opening logic) extracted for reuse by `recorder_gui.py`. *(existing file, refactored)* |
+| `VisionCamera/recorder_gui.py` | **New.** GUI recorder: source picker (detected USB indices or a typed device/URL), auto/manual exposure slider, capture-interval field, live view scaled to the window, and a Start/Stop recording button -- each Start begins a fresh `recording_<timestamp>.mp4` without restarting the app. Built on top of `VideoWriter.py`'s `open_camera`/`image_worker`/`video_worker`. |
 | `VisionCamera/viewCaptures.py` | Browses/blends periodic snapshots to eyeball motion. Added a `main()` entry point. *(existing file, minor update)* |
 | `VisionCamera/calibration_tool.py` | **New.** Click ≥4 known field points on a reference frame, enter each one's real field X/Y (meters); fits a pixel→field homography (`cv2.findHomography`), shows reprojection error, saves `calibration.json`. Run once per camera mount. Optionally undistorts the reference image first via `--lens-calibration`. |
 | `VisionCamera/pose_analyzer.py` | **New.** Scrub the recorded video frame-by-frame with a live preview, capture two frames (A/B). On each, click once for robot position and once more for a heading point. Converts both to field coordinates via the calibration, computes distance/direction/velocity/omega between A and B, and can append results to `results.csv`. Optionally undistorts every frame first via `--lens-calibration`. |
@@ -34,7 +35,7 @@ workflow above:
 | `VisionCamera/undistort.py` | **New.** `LensCalibration`: loads `lens_calibration.json`, builds/caches `cv2.fisheye` remap tables, and undistorts frames. Used by `calibration_tool.py` and `pose_analyzer.py`. |
 | `VisionCamera/field_coords.py` | **New.** Core math: `FieldCalibration` (homography wrapper), `Pose2d`, `kinematics_between()`. No GUI dependency — unit tested. |
 | `tests/test_VisionCamera.py` | **New.** 10 unit tests covering the homography round-trip, heading computation, angle wrapping, kinematics, and lens undistortion. |
-| `pyproject.toml` | Added runtime deps (`opencv-python`, `numpy`, `Pillow`) and 6 console-script entry points. |
+| `pyproject.toml` | Added runtime deps (`opencv-python`, `numpy`, `Pillow`) and 7 console-script entry points. |
 
 ## Coordinate convention
 
@@ -55,6 +56,10 @@ python -m VisionCamera.VideoWriter --source 0
 # --source also takes a stream URL (e.g. http://limelight.local:5800/stream.mjpg)
 # instead of a USB device index, and --width/--height/--cam-fps request a
 # capture resolution/rate from the camera if the default is too low.
+#
+# Or use the GUI version -- source picker, exposure slider, scaled live
+# view, Start/Stop recording (each Start = a new recording_<timestamp>.mp4):
+python -m VisionCamera.recorder_gui --source 0
 
 # 2. Calibrate the field homography once per camera mount, using a frame that
 #    shows >=4 known field points. Pass --lens-calibration if you did step 0.
@@ -115,3 +120,37 @@ homography ever sees them. Steps:
   a zero-distortion sanity check) but not yet run against a real fisheye
   USB camera or checkerboard — `cv2.fisheye.calibrate` can be finicky about
   sample coverage/count, so expect to iterate on capture quality.
+- `lens_calib.py` had picked up the same absolute-import regression as
+  `calibration_tool.py` before it (`from VideoWriter import ...` / `from
+  undistort import ...`). Separately, its switch from `cv2.fisheye.CALIB_*`
+  flag constants to the plain `cv2.CALIB_*` ones was a real, correct fix on
+  your part: this OpenCV build (5.0.0) doesn't expose those flags under
+  `cv2.fisheye` at all, so the original code would have raised
+  `AttributeError` the first time `calibrate()` ran.
+- **Why the import kept flip-flopping:** `calibration_tool.py` had its
+  sibling imports changed from relative back to absolute twice, and
+  `lens_calib.py` once — each time because absolute imports (`from
+  field_coords import ...`) are what work when a file is run directly
+  (e.g. an IDE's "Run Python File"), while relative imports (`from
+  .field_coords import ...`) are what work under `python -m
+  VisionCamera.x` / the installed console scripts. Rather than keep
+  reverting each other, `calibration_tool.py`, `lens_calib.py`,
+  `pose_analyzer.py`, and `recorder_gui.py` now all use a `try: from
+  .sibling import X / except ImportError: from sibling import X` fallback,
+  verified to work both ways — run them however's convenient.
+- `VideoWriter.py`'s `record()` had picked up a hardcoded override
+  (`source = 2; width = 1440; height = 810; cam_fps = 50`) that silently
+  ignored whatever `--source`/`--width`/`--height`/`--cam-fps` were passed
+  in — removed while extracting `open_camera()` for reuse by
+  `recorder_gui.py`, since that override would otherwise have propagated
+  into the GUI too.
+- `recorder_gui.py`'s exposure slider range (-13 to -1, a log2(seconds)
+  DirectShow convention) and the auto/manual `CAP_PROP_AUTO_EXPOSURE`
+  values (0.75/0.25) are a commonly-used but informally-documented
+  OpenCV/DirectShow convention, not something reliably queryable per
+  camera — if the slider does nothing or clamps before a usable exposure,
+  the actual range/convention for your specific camera may differ.
+- The recording pipeline (`CameraReader` start/stop, separate files per
+  session, periodic snapshots) was smoke-tested with a paced fake camera
+  source standing in for real hardware, but not against an actual USB
+  camera or its exposure control yet.

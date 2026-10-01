@@ -4,4 +4,5 @@ visioncamera-calibrate = VisionCamera.calibration_tool:main
 visioncamera-checkerboard = VisionCamera.checkerboard:main
 visioncamera-lens-calib = VisionCamera.lens_calib:main
 visioncamera-record = VisionCamera.VideoWriter:main
+visioncamera-record-gui = VisionCamera.recorder_gui:main
 visioncamera-view = VisionCamera.viewCaptures:main

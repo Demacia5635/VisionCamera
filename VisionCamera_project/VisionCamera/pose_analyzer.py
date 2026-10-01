@@ -32,8 +32,12 @@ from tkinter import filedialog, messagebox, ttk
 import cv2
 from PIL import Image, ImageTk
 
-from .field_coords import FieldCalibration, kinematics_between, pose_from_marks
-from .undistort import LensCalibration
+try:  # python -m VisionCamera.pose_analyzer
+    from .field_coords import FieldCalibration, kinematics_between, pose_from_marks
+    from .undistort import LensCalibration
+except ImportError:  # run directly, e.g. `python pose_analyzer.py`
+    from field_coords import FieldCalibration, kinematics_between, pose_from_marks
+    from undistort import LensCalibration
 
 MARK_RADIUS = 5
 RESULTS_FIELDS = [

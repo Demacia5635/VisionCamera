@@ -9,7 +9,9 @@ VisionCamera/checkerboard.py
 VisionCamera/field_coords.py
 VisionCamera/lens_calib.py
 VisionCamera/pose_analyzer.py
+VisionCamera/recorder_gui.py
 VisionCamera/undistort.py
+VisionCamera/undistortTest.py
 VisionCamera/viewCaptures.py
 VisionCamera.egg-info/PKG-INFO
 VisionCamera.egg-info/SOURCES.txt
