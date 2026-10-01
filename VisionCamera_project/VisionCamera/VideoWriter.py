@@ -86,6 +86,8 @@ def open_camera(source, width: int | None = None, height: int | None = None, cam
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     if cam_fps:
         cap.set(cv2.CAP_PROP_FPS, cam_fps)
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)   # manual exposure mode
+    cap.set(cv2.CAP_PROP_EXPOSURE, -10)
 
     ok, first_frame = cap.read()
     if not ok:
