@@ -60,7 +60,9 @@ AUTO_EXPOSURE_OFF = 0.25
 # can actually deliver instead of failing.
 RESOLUTION_PRESETS = [
     (640, 480, 50),
+    (1280, 720, 30),
     (1280, 720, 50),
+    (1600, 900, 50),
     (1920, 1080, 50),
     (2560, 1440, 50),
     (3840, 2160, 50),  # 4K
