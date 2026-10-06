@@ -40,6 +40,7 @@ except ImportError:  # run directly, e.g. `python pose_analyzer.py`
     from undistort import LensCalibration
 
 MARK_RADIUS = 5
+VIDEO_FILETYPES = [("Videos", "*.mp4 *.avi *.mov *.mkv"), ("All files", "*.*")]
 RESULTS_FIELDS = [
     "saved_at", "video", "frame_a_index", "frame_a_t", "frame_b_index", "frame_b_t",
     "dt_s", "pose_a_x_m", "pose_a_y_m", "pose_a_heading_deg",
@@ -87,6 +88,15 @@ class FramePanel(ttk.Frame):
     @property
     def marked(self) -> bool:
         return self.position_px is not None and self.heading_px is not None
+
+    def clear(self):
+        self.image = None
+        self.frame_index = None
+        self.t = None
+        self.position_px = None
+        self.heading_px = None
+        self.info.config(text="(not set)")
+        self.redraw()
 
     def _on_click(self, event):
         if self.image is None:
@@ -139,23 +149,47 @@ class FramePanel(ttk.Frame):
 class PoseAnalyzer(tk.Tk):
     def __init__(self, video_path: str, calib_path: str, results_path: str, lens_calib_path: str | None = None):
         super().__init__()
-        self.title(f"Pose analyzer - {video_path}")
         self.geometry("1300x900")
-        self.video_path = video_path
         self.results_path = results_path
         self.lens_calib = LensCalibration.load(lens_calib_path) if lens_calib_path else None
-
-        self.cap = cv2.VideoCapture(video_path)
-        if not self.cap.isOpened():
-            raise RuntimeError(f"Could not open video: {video_path}")
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
-        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.cap: cv2.VideoCapture | None = None
+        self.fps = 30.0
+        self.frame_count = 0
 
         self.calib = self._load_calibration(calib_path)
         self._last_pose_a = self._last_pose_b = self._last_kinematics = None
 
         self._build_ui()
+        self._open_video(video_path)
+
+    # ---------- video loading ----------
+    def _open_video(self, video_path: str) -> bool:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            messagebox.showerror("Could not open video", f"Could not open: {video_path}")
+            return False
+
+        if self.cap is not None:
+            self.cap.release()
+        self.cap = cap
+        self.video_path = video_path
+        self.title(f"Pose analyzer - {video_path}")
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.slider.configure(to=max(0, self.frame_count - 1))
+
+        # Frame A/B marks belong to the previous video's pixels/timestamps.
+        self.panel_a.clear()
+        self.panel_b.clear()
+        self.update_results()
+
         self.goto_frame(0)
+        return True
+
+    def open_video(self):
+        path = filedialog.askopenfilename(title="Select a recording", filetypes=VIDEO_FILETYPES)
+        if path:
+            self._open_video(path)
 
     # ---------- calibration ----------
     def _load_calibration(self, calib_path: str) -> FieldCalibration | None:
@@ -181,13 +215,15 @@ class PoseAnalyzer(tk.Tk):
         ttk.Button(scrub, text="-1", width=3, command=lambda: self.step(-1)).pack(side="left")
 
         self.slider_var = tk.IntVar(value=0)
-        self.slider = ttk.Scale(scrub, from_=0, to=max(0, self.frame_count - 1), orient="horizontal",
+        self.slider = ttk.Scale(scrub, from_=0, to=0, orient="horizontal",
                                  variable=self.slider_var, command=self._on_slider)
         self.slider.pack(side="left", fill="x", expand=True, padx=6)
 
         ttk.Button(scrub, text="+1", width=3, command=lambda: self.step(1)).pack(side="left")
         ttk.Button(scrub, text="+10", width=4, command=lambda: self.step(10)).pack(side="left")
         ttk.Button(scrub, text=">|", width=3, command=lambda: self.goto_frame(self.frame_count - 1)).pack(side="left")
+
+        ttk.Button(scrub, text="Open video...", command=self.open_video).pack(side="left", padx=(10, 0))
 
         self.frame_label = ttk.Label(scrub, text="", width=26)
         self.frame_label.pack(side="left", padx=(10, 0))
@@ -229,6 +265,8 @@ class PoseAnalyzer(tk.Tk):
         self.goto_frame(int(self.slider_var.get()) + delta)
 
     def goto_frame(self, index: int, from_slider: bool = False):
+        if self.cap is None:
+            return
         index = max(0, min(self.frame_count - 1, index))
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, index)
         ok, frame = self.cap.read()
@@ -260,6 +298,9 @@ class PoseAnalyzer(tk.Tk):
         self.preview_canvas.create_image(cw // 2, ch // 2, image=self._preview_photo, anchor="center")
 
     def capture_into(self, which: str):
+        if getattr(self, "_current_frame", None) is None:
+            messagebox.showerror("No video", "Open a video first.")
+            return
         panel = self.panel_a if which == "A" else self.panel_b
         panel.set_frame(self._current_frame, self._current_index, self._current_t)
 
@@ -322,7 +363,8 @@ class PoseAnalyzer(tk.Tk):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("video", help="Recorded video file (.mp4) from VideoWriter.py")
+    parser.add_argument("video", nargs="?", default=None,
+                         help="Recorded video file (.mp4) from VideoWriter.py (omit to pick one)")
     parser.add_argument("-c", "--calibration", default="calibration.json", help="Calibration file to use")
     parser.add_argument("-r", "--results", default="results.csv", help="CSV file to append saved results to")
     parser.add_argument("--lens-calibration", default=None,
@@ -330,7 +372,17 @@ def main(argv=None):
                               "marking -- required for a fisheye/wide-FOV camera; must match the calibration "
                               "used to build --calibration")
     args = parser.parse_args(argv)
-    PoseAnalyzer(args.video, args.calibration, args.results, args.lens_calibration).mainloop()
+
+    video_path = args.video
+    if video_path is None:
+        root = tk.Tk()
+        root.withdraw()
+        video_path = filedialog.askopenfilename(title="Select a recording", filetypes=VIDEO_FILETYPES)
+        root.destroy()
+        if not video_path:
+            return
+
+    PoseAnalyzer(video_path, args.calibration, args.results, args.lens_calibration).mainloop()
 
 
 if __name__ == "__main__":

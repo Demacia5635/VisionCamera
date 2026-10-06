@@ -118,8 +118,10 @@ def calibrate(source, cols: int, rows: int, square_size: float, out_path: str, m
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source", default="2", help="USB camera device index or a stream URL")
-    parser.add_argument("--cols", type=int, required=True, help="Interior corners per row (squares_per_row - 1)")
-    parser.add_argument("--rows", type=int, required=True, help="Interior corners per column (squares_per_col - 1)")
+    parser.add_argument("--cols", type=int, default=9,
+                         help="Interior corners per row (squares_per_row - 1); matches checkerboard.py's default")
+    parser.add_argument("--rows", type=int, default=6,
+                         help="Interior corners per column (squares_per_col - 1); matches checkerboard.py's default")
     parser.add_argument("--square-size", type=float, default=1.0,
                          help="Checkerboard square size (any consistent unit; only affects scale, not distortion)")
     parser.add_argument("--min-samples", type=int, default=MIN_SAMPLES, help="Minimum samples required")

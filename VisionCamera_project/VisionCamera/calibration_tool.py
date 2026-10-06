@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import sys
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import cv2
 import numpy as np
@@ -33,20 +33,16 @@ except ImportError:  # run directly, e.g. `python calibration_tool.py`
     from undistort import LensCalibration
 
 GRID_STEP_M = 1.0  # meters between preview gridlines
+IMAGE_FILETYPES = [("Images", "*.jpg *.jpeg *.png *.bmp"), ("All files", "*.*")]
 
 
 class CalibrationTool(tk.Tk):
     def __init__(self, image_path: str, out_path: str, lens_calib_path: str | None = None):
         super().__init__()
-        self.title(f"Field calibration - {image_path}")
         self.geometry("1100x750")
         self.out_path = out_path
+        self.lens_calib_path = lens_calib_path
 
-        self.image = Image.open(image_path).convert("RGB")
-        if lens_calib_path:
-            lens = LensCalibration.load(lens_calib_path)
-            undistorted = lens.undistort(cv2.cvtColor(np.array(self.image), cv2.COLOR_RGB2BGR))
-            self.image = Image.fromarray(cv2.cvtColor(undistorted, cv2.COLOR_BGR2RGB))
         self.photo = None
         self.scale = 1.0
         self.offset = (0, 0)
@@ -57,12 +53,48 @@ class CalibrationTool(tk.Tk):
         self.show_grid = tk.BooleanVar(value=False)
 
         self._build_ui()
+        self._load_image(image_path)
         self.bind("<Configure>", lambda e: self.redraw())
+
+    # ---------- image loading ----------
+    def _load_image(self, image_path: str):
+        image = Image.open(image_path).convert("RGB")
+        if self.lens_calib_path:
+            try:
+                lens = LensCalibration.load(self.lens_calib_path)
+            except (OSError, ValueError, KeyError) as e:
+                messagebox.showwarning(
+                    "No lens calibration",
+                    f"Could not load {self.lens_calib_path} ({e}).\n"
+                    "Continuing without fisheye undistortion -- run lens_calib.py first if your "
+                    "camera needs it, then reopen this image.",
+                )
+                self.lens_calib_path = None  # don't re-warn on every "Open image..."
+            else:
+                undistorted = lens.undistort(cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
+                image = Image.fromarray(cv2.cvtColor(undistorted, cv2.COLOR_BGR2RGB))
+        self.image = image
+        self.title(f"Field calibration - {image_path}")
+
+        # Points/calibration are tied to the image they were clicked on.
+        self.points = []
+        self.listbox.delete(0, "end")
+        self.calib = None
+        self.show_grid.set(False)
+        self.status.config(text="0 points (need >= 4)")
+        self.redraw()
+
+    def open_image(self):
+        path = filedialog.askopenfilename(title="Select a reference frame image", filetypes=IMAGE_FILETYPES)
+        if path:
+            self._load_image(path)
 
     # ---------- UI ----------
     def _build_ui(self):
         left = ttk.Frame(self, padding=6)
         left.pack(side="left", fill="y")
+
+        ttk.Button(left, text="Open image...", command=self.open_image).pack(fill="x", pady=(0, 6))
 
         ttk.Label(left, text="Click a known point on the image,\nthen enter its field X/Y (m).",
                   justify="left").pack(anchor="w")
@@ -211,13 +243,24 @@ class CalibrationTool(tk.Tk):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("image", help="Reference frame image showing known field points")
+    parser.add_argument("image", nargs="?", default=None,
+                         help="Reference frame image showing known field points (omit to pick one)")
     parser.add_argument("-o", "--out", default="calibration.json", help="Output calibration file")
     parser.add_argument("--lens-calibration", default="lens_calibration.json",
                          help="lens_calibration.json (see lens_calib.py) to undistort the "
                               "reference image before marking points -- required for a fisheye/wide-FOV camera")
     args = parser.parse_args(argv)
-    CalibrationTool(args.image, args.out, args.lens_calibration).mainloop()
+
+    image_path = args.image
+    if image_path is None:
+        root = tk.Tk()
+        root.withdraw()
+        image_path = filedialog.askopenfilename(title="Select a reference frame image", filetypes=IMAGE_FILETYPES)
+        root.destroy()
+        if not image_path:
+            return
+
+    CalibrationTool(image_path, args.out, args.lens_calibration).mainloop()
 
 
 if __name__ == "__main__":

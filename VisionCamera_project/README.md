@@ -25,11 +25,12 @@ workflow above:
 
 | File | Purpose |
 |---|---|
+| `VisionCamera/__main__.py` | **New.** `python -m VisionCamera` opens a launcher window listing every tool below (one button each, launched as its own process) plus a one-click checkerboard generator. *(existing file, was a placeholder)* |
 | `VisionCamera/VideoWriter.py` | Headless/CLI recorder: camera stream to MP4 + periodic JPEG snapshots. `open_camera()` (shared camera-opening logic) extracted for reuse by `recorder_gui.py`. *(existing file, refactored)* |
 | `VisionCamera/recorder_gui.py` | **New.** GUI recorder: source picker (detected USB indices or a typed device/URL), auto/manual exposure slider, capture-interval field, live view scaled to the window, and a Start/Stop recording button -- each Start begins a fresh `recording_<timestamp>.mp4` without restarting the app. Built on top of `VideoWriter.py`'s `open_camera`/`image_worker`/`video_worker`. |
 | `VisionCamera/viewCaptures.py` | Browses/blends periodic snapshots to eyeball motion. Added a `main()` entry point. *(existing file, minor update)* |
-| `VisionCamera/calibration_tool.py` | **New.** Click ≥4 known field points on a reference frame, enter each one's real field X/Y (meters); fits a pixel→field homography (`cv2.findHomography`), shows reprojection error, saves `calibration.json`. Run once per camera mount. Optionally undistorts the reference image first via `--lens-calibration`. |
-| `VisionCamera/pose_analyzer.py` | **New.** Scrub the recorded video frame-by-frame with a live preview, capture two frames (A/B). On each, click once for robot position and once more for a heading point. Converts both to field coordinates via the calibration, computes distance/direction/velocity/omega between A and B, and can append results to `results.csv`. Optionally undistorts every frame first via `--lens-calibration`. |
+| `VisionCamera/calibration_tool.py` | **New.** Click ≥4 known field points on a reference frame, enter each one's real field X/Y (meters); fits a pixel→field homography (`cv2.findHomography`), shows reprojection error, saves `calibration.json`. Run once per camera mount. Optionally undistorts the reference image first via `--lens-calibration`. The reference image is now optional on the command line -- omit it (or use "Open image..." to switch mid-session) and a file picker opens instead. |
+| `VisionCamera/pose_analyzer.py` | **New.** Scrub the recorded video frame-by-frame with a live preview, capture two frames (A/B). On each, click once for robot position and once more for a heading point. Converts both to field coordinates via the calibration, computes distance/direction/velocity/omega between A and B, and can append results to `results.csv`. Optionally undistorts every frame first via `--lens-calibration`. The video is now optional on the command line -- omit it (or use "Open video..." to switch mid-session) and a file picker opens instead. |
 | `VisionCamera/lens_calib.py` | **New.** Checkerboard-based fisheye intrinsic calibration (`cv2.fisheye.calibrate`) for a wide-FOV/fisheye USB camera. Live-captures checkerboard samples from the camera, saves `lens_calibration.json`. One-time step per camera. |
 | `VisionCamera/checkerboard.py` | **New.** Generates a print-ready checkerboard PNG (sized in mm, at 300 dpi) matching `lens_calib.py`'s `--cols`/`--rows`, so there's no need to source one externally. Verified OpenCV's `findChessboardCorners` detects it. |
 | `VisionCamera/undistort.py` | **New.** `LensCalibration`: loads `lens_calibration.json`, builds/caches `cv2.fisheye` remap tables, and undistorts frames. Used by `calibration_tool.py` and `pose_analyzer.py`. |
@@ -46,6 +47,10 @@ against the robot's own odometry/`Pose2d`.
 ## Usage
 
 ```
+# Launcher: a window listing every tool below as a button (plus a one-click
+# checkerboard generator); each button starts that tool as its own process.
+python -m VisionCamera
+
 # 0. Lens calibration (one-time per camera; required for a fisheye/wide-FOV
 #    camera like a 150 deg USB cam -- see "Fisheye / wide-FOV lens" below).
 #    --cols/--rows are interior corners of your checkerboard.
@@ -154,3 +159,16 @@ homography ever sees them. Steps:
   session, periodic snapshots) was smoke-tested with a paced fake camera
   source standing in for real hardware, but not against an actual USB
   camera or its exposure control yet.
+- `calibration_tool.py`'s `--lens-calibration` default had changed (outside
+  this session) from `None` to `"lens_calibration.json"` -- a reasonable
+  auto-pick-up default, kept as-is -- but loading it was unguarded, so the
+  tool would crash on startup for anyone who hasn't run `lens_calib.py` yet
+  and has no such file in their working directory. Made the load tolerant:
+  a missing/invalid file now shows a warning and continues without fisheye
+  correction instead of crashing.
+- `__main__.py` launches each tool via `subprocess.Popen([sys.executable,
+  "-m", "VisionCamera.<tool>"])`, non-blocking, so multiple tools can run
+  at once (e.g. recording while reviewing an older clip). It only confirmed
+  each tool's process *starts*; it doesn't capture or surface errors a tool
+  raises after that point (those show up in that tool's own window/console,
+  same as running it directly would).
