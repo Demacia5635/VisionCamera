@@ -151,7 +151,7 @@ class PoseAnalyzer(tk.Tk):
         super().__init__()
         self.geometry("1300x900")
         self.results_path = results_path
-        self.lens_calib = LensCalibration.load(lens_calib_path) if lens_calib_path else None
+        self.lens_calib = self._load_lens_calibration(lens_calib_path)
         self.cap: cv2.VideoCapture | None = None
         self.fps = 30.0
         self.frame_count = 0
@@ -192,6 +192,20 @@ class PoseAnalyzer(tk.Tk):
             self._open_video(path)
 
     # ---------- calibration ----------
+    def _load_lens_calibration(self, lens_calib_path: str | None) -> LensCalibration | None:
+        if not lens_calib_path:
+            return None
+        try:
+            return LensCalibration.load(lens_calib_path)
+        except (OSError, ValueError, KeyError) as e:
+            messagebox.showwarning(
+                "No lens calibration",
+                f"Could not load {lens_calib_path} ({e}).\n"
+                "Continuing without fisheye undistortion -- marks will be off if calibration.json "
+                "was built from an undistorted reference image. Run lens_calib.py first if needed.",
+            )
+            return None
+
     def _load_calibration(self, calib_path: str) -> FieldCalibration | None:
         if os.path.isfile(calib_path):
             return FieldCalibration.load(calib_path)
@@ -367,7 +381,7 @@ def main(argv=None):
                          help="Recorded video file (.mp4) from VideoWriter.py (omit to pick one)")
     parser.add_argument("-c", "--calibration", default="calibration.json", help="Calibration file to use")
     parser.add_argument("-r", "--results", default="results.csv", help="CSV file to append saved results to")
-    parser.add_argument("--lens-calibration", default=None,
+    parser.add_argument("--lens-calibration", default="lens_calibration.json",
                          help="lens_calibration.json (see lens_calib.py) to undistort every frame before "
                               "marking -- required for a fisheye/wide-FOV camera; must match the calibration "
                               "used to build --calibration")

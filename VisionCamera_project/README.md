@@ -172,3 +172,12 @@ homography ever sees them. Steps:
   each tool's process *starts*; it doesn't capture or surface errors a tool
   raises after that point (those show up in that tool's own window/console,
   same as running it directly would).
+- `pose_analyzer.py` *does* apply lens undistortion (`goto_frame()` already
+  called `self.lens_calib.undistort(frame)` before anything else saw the
+  frame) -- but unlike `calibration_tool.py`, its `--lens-calibration`
+  defaulted to `None` instead of auto-picking-up `lens_calibration.json`,
+  so it silently skipped correction unless you remembered to pass the flag
+  every time. That's a real mismatch: `calibration.json` is built from an
+  undistorted reference image, so marks on un-corrected frames are
+  systematically off. Fixed to match `calibration_tool.py`'s default and
+  graceful-missing-file warning.
