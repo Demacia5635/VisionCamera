@@ -16,6 +16,7 @@ non-collinear points work, since a homography is fit to them directly.
 """
 from __future__ import annotations
 
+import os
 import argparse
 import sys
 import tkinter as tk
@@ -65,7 +66,7 @@ class CalibrationTool(tk.Tk):
             except (OSError, ValueError, KeyError) as e:
                 messagebox.showwarning(
                     "No lens calibration",
-                    f"Could not load {self.lens_calib_path} ({e}).\n"
+                    f"Could not load {os.getcwd()} {self.lens_calib_path} ({e}).\n"
                     "Continuing without fisheye undistortion -- run lens_calib.py first if your "
                     "camera needs it, then reopen this image.",
                 )
