@@ -30,12 +30,12 @@ workflow above:
 | `VisionCamera/recorder_gui.py` | **New.** GUI recorder: source picker (detected USB indices or a typed device/URL), auto/manual exposure slider, capture-interval field, live view scaled to the window, and a Start/Stop recording button -- each Start begins a fresh `recording_<timestamp>.mp4` without restarting the app. Built on top of `VideoWriter.py`'s `open_camera`/`image_worker`/`video_worker`. |
 | `VisionCamera/viewCaptures.py` | Browses/blends periodic snapshots to eyeball motion. Added a `main()` entry point. *(existing file, minor update)* |
 | `VisionCamera/calibration_tool.py` | **New.** Click ≥4 known field points on a reference frame, enter each one's real field X/Y (meters); fits a pixel→field homography (`cv2.findHomography`), shows reprojection error, saves `calibration.json`. Run once per camera mount. Optionally undistorts the reference image first via `--lens-calibration`. The reference image is now optional on the command line -- omit it (or use "Open image..." to switch mid-session) and a file picker opens instead. |
-| `VisionCamera/pose_analyzer.py` | **New.** Scrub the recorded video frame-by-frame with a live preview, capture two frames (A/B). On each, click once for robot position and once more for a heading point. Converts both to field coordinates via the calibration, computes distance/direction/velocity/omega between A and B, and can append results to `results.csv`. Optionally undistorts every frame first via `--lens-calibration`. The video is now optional on the command line -- omit it (or use "Open video..." to switch mid-session) and a file picker opens instead. |
+| `VisionCamera/pose_analyzer.py` | **New.** Scrub the recorded video frame-by-frame with a live preview, capture two frames (A/B). Frame A/B are shown at **native resolution in a scrollable canvas** (pan with the scrollbars, no downscaling) so marks are pixel-accurate; click once for robot position and once more for a heading point. Converts both to field coordinates via the calibration, computes distance/direction/velocity/omega between A and B (omega shown in both deg/s and rad/s; a **Turn direction** radio group -- Auto/Left/Right -- resolves turns of more than 180°, which otherwise wrap to their shortest-path equivalent), and can append results to `results.csv`. The video is optional on the command line -- omit it (or use "Open video..." to switch mid-session) and a file picker opens instead. Lens calibration is **mandatory**: if `--lens-calibration`'s file isn't found, a file picker opens to select it, repeating until a valid one is chosen or the tool exits. |
 | `VisionCamera/lens_calib.py` | **New.** Checkerboard-based fisheye intrinsic calibration (`cv2.fisheye.calibrate`) for a wide-FOV/fisheye USB camera. Live-captures checkerboard samples from the camera, saves `lens_calibration.json`. One-time step per camera. |
 | `VisionCamera/checkerboard.py` | **New.** Generates a print-ready checkerboard PNG (sized in mm, at 300 dpi) matching `lens_calib.py`'s `--cols`/`--rows`, so there's no need to source one externally. Verified OpenCV's `findChessboardCorners` detects it. |
 | `VisionCamera/undistort.py` | **New.** `LensCalibration`: loads `lens_calibration.json`, builds/caches `cv2.fisheye` remap tables, and undistorts frames. Used by `calibration_tool.py` and `pose_analyzer.py`. |
 | `VisionCamera/field_coords.py` | **New.** Core math: `FieldCalibration` (homography wrapper), `Pose2d`, `kinematics_between()`. No GUI dependency — unit tested. |
-| `tests/test_VisionCamera.py` | **New.** 10 unit tests covering the homography round-trip, heading computation, angle wrapping, kinematics, and lens undistortion. |
+| `tests/test_VisionCamera.py` | **New.** 15 unit tests covering the homography round-trip, heading computation, angle wrapping, kinematics (including directed turns), and lens undistortion. |
 | `pyproject.toml` | Added runtime deps (`opencv-python`, `numpy`, `Pillow`) and 7 console-script entry points. |
 
 ## Coordinate convention
@@ -179,5 +179,14 @@ homography ever sees them. Steps:
   so it silently skipped correction unless you remembered to pass the flag
   every time. That's a real mismatch: `calibration.json` is built from an
   undistorted reference image, so marks on un-corrected frames are
-  systematically off. Fixed to match `calibration_tool.py`'s default and
-  graceful-missing-file warning.
+  systematically off. First fixed to match `calibration_tool.py`'s default
+  with a graceful "continue without it" warning, then upgraded further to
+  **mandatory**: a missing/invalid file now opens a picker and keeps
+  re-prompting (rather than letting you continue uncorrected) until a valid
+  `lens_calibration.json` is chosen or you cancel, which exits the tool.
+- `results.csv`'s schema gained two columns (`turn_direction`,
+  `omega_rad_s`, alongside the existing `omega_deg_s`). `save_result()`
+  only writes a header row for a brand-new file, so **appending to a
+  `results.csv` written before this change will misalign columns** against
+  its old header -- start a new results file, or manually update that
+  file's header row, if you have one from before.

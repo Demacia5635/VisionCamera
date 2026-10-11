@@ -53,6 +53,26 @@ def wrap_angle(angle: float) -> float:
     return (angle + math.pi) % (2 * math.pi) - math.pi
 
 
+def directed_heading_delta(raw_delta: float, turn_direction: str = "auto") -> float:
+    """Resolve a raw heading delta (pose_b.heading - pose_a.heading) to a
+    signed rotation, given which way the robot is known to have turned.
+
+    "auto" (default) takes the shortest-path equivalent (wrap_angle), which
+    is ambiguous for turns of more than a half rotation: a true 300 deg left
+    turn and a 60 deg right turn wrap to the same angle. "left" (CCW,
+    positive) or "right" (CW, negative) force that sign by adding or
+    subtracting one full turn to the shortest-path value when needed.
+    """
+    delta = wrap_angle(raw_delta)
+    if turn_direction == "auto":
+        return delta
+    if turn_direction == "left":
+        return delta + 2 * math.pi if delta < 0 else delta
+    if turn_direction == "right":
+        return delta - 2 * math.pi if delta > 0 else delta
+    raise ValueError(f"Unknown turn_direction: {turn_direction!r}")
+
+
 class FieldCalibration:
     """A pixel->field homography for one fixed camera setup."""
 
@@ -118,7 +138,8 @@ def pose_from_marks(
     return Pose2d(x, y, heading)
 
 
-def kinematics_between(pose_a: Pose2d, t_a: float, pose_b: Pose2d, t_b: float) -> Kinematics:
+def kinematics_between(pose_a: Pose2d, t_a: float, pose_b: Pose2d, t_b: float,
+                        turn_direction: str = "auto") -> Kinematics:
     dt = t_b - t_a
     if dt == 0:
         raise ValueError("The two frames have identical timestamps")
@@ -127,5 +148,6 @@ def kinematics_between(pose_a: Pose2d, t_a: float, pose_b: Pose2d, t_b: float) -
     distance = math.hypot(dx, dy)
     direction = math.atan2(dy, dx)
     velocity = distance / dt
-    omega = wrap_angle(pose_b.heading - pose_a.heading) / dt
+    heading_delta = directed_heading_delta(pose_b.heading - pose_a.heading, turn_direction)
+    omega = heading_delta / dt
     return Kinematics(dt, distance, direction, velocity, omega)

@@ -5,6 +5,7 @@ import pytest
 
 from VisionCamera.field_coords import (
     FieldCalibration,
+    directed_heading_delta,
     kinematics_between,
     pose_from_marks,
     wrap_angle,
@@ -75,6 +76,49 @@ def test_kinematics_between_rotation(calib):
     k = kinematics_between(pose_a, 0.0, pose_b, 1.0)
     assert k.distance == pytest.approx(0.0, abs=1e-6)
     assert k.omega == pytest.approx(math.pi / 2, abs=1e-6)
+
+
+def test_directed_heading_delta_auto_is_shortest_path():
+    assert directed_heading_delta(math.radians(-60)) == pytest.approx(math.radians(-60))
+    assert directed_heading_delta(math.radians(300)) == pytest.approx(math.radians(-60))
+
+
+def test_directed_heading_delta_left_forces_ccw():
+    # A -60 deg shortest-path delta, forced "left", becomes +300 deg instead.
+    assert directed_heading_delta(math.radians(-60), "left") == pytest.approx(math.radians(300))
+    # Already CCW: "left" leaves it alone.
+    assert directed_heading_delta(math.radians(60), "left") == pytest.approx(math.radians(60))
+
+
+def test_directed_heading_delta_right_forces_cw():
+    assert directed_heading_delta(math.radians(60), "right") == pytest.approx(math.radians(-300))
+    assert directed_heading_delta(math.radians(-60), "right") == pytest.approx(math.radians(-60))
+
+
+def test_directed_heading_delta_rejects_unknown_direction():
+    with pytest.raises(ValueError):
+        directed_heading_delta(0.0, "sideways")
+
+
+def test_kinematics_between_turn_direction(calib):
+    pose_a = pose_from_marks(calib, (100, 300), (200, 300))  # position (1,1), heading 0
+
+    # heading_b = -60 deg relative to position (1,1): the shortest path is a
+    # 60 deg right turn, equivalently a 300 deg left turn.
+    theta = -math.pi / 3
+    position_field = (1.0, 1.0)
+    heading_field = (position_field[0] + math.cos(theta), position_field[1] + math.sin(theta))
+    pose_b = pose_from_marks(calib, calib.field_to_pixel(*position_field), calib.field_to_pixel(*heading_field))
+    assert pose_b.heading == pytest.approx(theta, abs=1e-6)
+
+    k_auto = kinematics_between(pose_a, 0.0, pose_b, 1.0)
+    assert k_auto.omega == pytest.approx(theta, abs=1e-6)
+
+    k_left = kinematics_between(pose_a, 0.0, pose_b, 1.0, turn_direction="left")
+    assert k_left.omega == pytest.approx(theta + 2 * math.pi, abs=1e-6)
+
+    k_right = kinematics_between(pose_a, 0.0, pose_b, 1.0, turn_direction="right")
+    assert k_right.omega == pytest.approx(theta, abs=1e-6)  # already the "right" direction
 
 
 def test_kinematics_rejects_zero_dt(calib):

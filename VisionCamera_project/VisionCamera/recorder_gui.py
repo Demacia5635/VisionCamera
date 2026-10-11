@@ -1,6 +1,6 @@
 """GUI front-end for recording the overhead camera.
 
-Usage:  python -m VisionCamera.recorder_gui [--source 0] [options]
+Usage:  python -m VisionCamera.recorder_gui [--source 1] [options]
 
 A live-view window with:
   - a Source box (pick a detected camera index or type a device index /
@@ -36,9 +36,9 @@ import cv2
 from PIL import Image, ImageTk
 
 try:  # python -m VisionCamera.recorder_gui
-    from .VideoWriter import DEFAULT_SOURCE, fourcc_code, image_worker, open_camera, parse_source, video_worker
+    from .VideoWriter import fourcc_code, image_worker, open_camera, parse_source, video_worker
 except ImportError:  # run directly, e.g. `python recorder_gui.py`
-    from VideoWriter import DEFAULT_SOURCE, fourcc_code, image_worker, open_camera, parse_source, video_worker
+    from VideoWriter import fourcc_code, image_worker, open_camera, parse_source, video_worker
 
 # Typical DirectShow/UVC exposure is a log2(seconds) value, e.g. -6 = 1/64 s.
 # The actual supported range is camera-specific and not reliably queryable
@@ -74,6 +74,10 @@ RESOLUTION_PRESETS = [
 def _preset_label(width: int, height: int, fps: float) -> str:
     tag = " (4K)" if (width, height) == (3840, 2160) else ""
     return f"{width}x{height} @ {fps:g}fps{tag}"
+
+
+DEFAULT_GUI_SOURCE = "1"
+DEFAULT_RESOLUTION = (1440, 810, 50)
 
 
 class CameraReader(threading.Thread):
@@ -190,7 +194,7 @@ class RecorderGUI(tk.Tk):
         self.interval_var.set(str(save_interval))
         self.source_var.set(str(source))
 
-        default_width, default_height, default_fps = RESOLUTION_PRESETS[0]
+        default_width, default_height, default_fps = DEFAULT_RESOLUTION
         width = default_width if width is None else width
         height = default_height if height is None else height
         cam_fps = default_fps if cam_fps is None else cam_fps
@@ -211,9 +215,9 @@ class RecorderGUI(tk.Tk):
         top.pack(fill="x")
 
         ttk.Label(top, text="Source:").pack(side="left")
-        self.source_var = tk.StringVar(value=str(DEFAULT_SOURCE))
+        self.source_var = tk.StringVar(value=DEFAULT_GUI_SOURCE)
         self.source_combo = ttk.Combobox(top, textvariable=self.source_var,
-                                          values=probe_sources() or [str(DEFAULT_SOURCE)], width=22)
+                                          values=probe_sources() or [DEFAULT_GUI_SOURCE], width=22)
         self.source_combo.pack(side="left", padx=(4, 4))
 
         ttk.Label(top, text="Resolution:").pack(side="left", padx=(8, 0))
@@ -226,7 +230,7 @@ class RecorderGUI(tk.Tk):
         ttk.Button(top, text="Open", command=self._on_open_clicked).pack(side="left", padx=(8, 0))
 
         ttk.Label(top, text="   Capture interval (s):").pack(side="left")
-        self.interval_var = tk.StringVar(value="0.5")
+        self.interval_var = tk.StringVar(value="1.0")
         interval_box = ttk.Spinbox(top, from_=0.1, to=60, increment=0.1, textvariable=self.interval_var, width=6,
                                     command=self._on_interval_changed)
         interval_box.pack(side="left")
@@ -381,13 +385,13 @@ class RecorderGUI(tk.Tk):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--source", default=str(DEFAULT_SOURCE),
+    parser.add_argument("--source", default=DEFAULT_GUI_SOURCE,
                          help="USB camera device index (0, 1, ...) or a stream URL to open at startup")
     parser.add_argument("--width", type=int, default=None, help="Requested capture width (px)")
     parser.add_argument("--height", type=int, default=None, help="Requested capture height (px)")
     parser.add_argument("--cam-fps", type=float, default=None, help="Requested capture frame rate")
     parser.add_argument("--save-dir", default="captures", help="Directory for periodic JPEG snapshots")
-    parser.add_argument("--save-interval", type=float, default=0.5, help="Initial seconds between JPEG snapshots")
+    parser.add_argument("--save-interval", type=float, default=1.0, help="Initial seconds between JPEG snapshots")
     parser.add_argument("--jpeg-quality", type=int, default=90, help="JPEG quality (1-100)")
     args = parser.parse_args(argv)
 

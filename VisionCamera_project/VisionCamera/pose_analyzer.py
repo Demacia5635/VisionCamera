@@ -45,12 +45,13 @@ RESULTS_FIELDS = [
     "saved_at", "video", "frame_a_index", "frame_a_t", "frame_b_index", "frame_b_t",
     "dt_s", "pose_a_x_m", "pose_a_y_m", "pose_a_heading_deg",
     "pose_b_x_m", "pose_b_y_m", "pose_b_heading_deg",
-    "distance_m", "direction_deg", "velocity_mps", "omega_deg_s",
+    "distance_m", "direction_deg", "velocity_mps", "turn_direction", "omega_deg_s", "omega_rad_s",
 ]
 
 
 class FramePanel(ttk.Frame):
-    """A canvas showing one captured frame, with click-to-mark position+heading."""
+    """A scrollable canvas showing one captured frame at native (full)
+    resolution, with click-to-mark position+heading."""
 
     def __init__(self, parent, label: str, on_change):
         super().__init__(parent, padding=4)
@@ -61,17 +62,24 @@ class FramePanel(ttk.Frame):
         self.info = ttk.Label(self, text="(not set)")
         self.info.pack(anchor="w")
 
-        self.canvas = tk.Canvas(self, bg="#202020", highlightthickness=0, height=360)
-        self.canvas.pack(fill="both", expand=True)
+        canvas_frame = ttk.Frame(self)
+        canvas_frame.pack(fill="both", expand=True)
+        canvas_frame.rowconfigure(0, weight=1)
+        canvas_frame.columnconfigure(0, weight=1)
+
+        self.canvas = tk.Canvas(canvas_frame, bg="#202020", highlightthickness=0)
+        vbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        hbar = ttk.Scrollbar(canvas_frame, orient="horizontal", command=self.canvas.xview)
+        self.canvas.configure(yscrollcommand=vbar.set, xscrollcommand=hbar.set)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        vbar.grid(row=0, column=1, sticky="ns")
+        hbar.grid(row=1, column=0, sticky="ew")
         self.canvas.bind("<Button-1>", self._on_click)
-        self.canvas.bind("<Configure>", lambda e: self.redraw())
 
         self.frame_index: int | None = None
         self.t: float | None = None
         self.image: Image.Image | None = None
         self.photo = None
-        self.scale = 1.0
-        self.offset = (0, 0)
         self.position_px: tuple[float, float] | None = None
         self.heading_px: tuple[float, float] | None = None
 
@@ -81,7 +89,8 @@ class FramePanel(ttk.Frame):
         self.t = t
         self.position_px = None
         self.heading_px = None
-        self.info.config(text=f"frame #{frame_index}   t={t:.3f} s")
+        self.info.config(text=f"frame #{frame_index}   t={t:.3f} s   "
+                               f"({self.image.width}x{self.image.height}, native resolution -- scroll to pan)")
         self.redraw()
         self.on_change()
 
@@ -101,7 +110,7 @@ class FramePanel(ttk.Frame):
     def _on_click(self, event):
         if self.image is None:
             return
-        ix, iy = self._canvas_to_image(event.x, event.y)
+        ix, iy = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
         if not (0 <= ix < self.image.width and 0 <= iy < self.image.height):
             return
         if self.position_px is None:
@@ -114,36 +123,23 @@ class FramePanel(ttk.Frame):
         self.redraw()
         self.on_change()
 
-    def _canvas_to_image(self, cx, cy):
-        ox, oy = self.offset
-        return (cx - ox) / self.scale, (cy - oy) / self.scale
-
-    def _image_to_canvas(self, ix, iy):
-        ox, oy = self.offset
-        return ix * self.scale + ox, iy * self.scale + oy
-
     def redraw(self):
         self.canvas.delete("all")
         if self.image is None:
+            self.canvas.configure(scrollregion=(0, 0, 0, 0))
             return
-        cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
-        if cw < 2 or ch < 2:
-            return
-        self.scale = min(cw / self.image.width, ch / self.image.height)
-        size = (max(1, int(self.image.width * self.scale)), max(1, int(self.image.height * self.scale)))
-        ox, oy = (cw - size[0]) // 2, (ch - size[1]) // 2
-        self.offset = (ox, oy)
-        self.photo = ImageTk.PhotoImage(self.image.resize(size, Image.Resampling.LANCZOS))
-        self.canvas.create_image(ox, oy, image=self.photo, anchor="nw")
+        # Native resolution, no scaling -- canvas coordinates == image pixel
+        # coordinates (scrolling is the only offset, handled by canvasx/y).
+        self.photo = ImageTk.PhotoImage(self.image)
+        self.canvas.create_image(0, 0, image=self.photo, anchor="nw")
+        self.canvas.configure(scrollregion=(0, 0, self.image.width, self.image.height))
 
         if self.position_px:
-            cx, cy = self._image_to_canvas(*self.position_px)
+            cx, cy = self.position_px
             self.canvas.create_oval(cx - MARK_RADIUS, cy - MARK_RADIUS, cx + MARK_RADIUS, cy + MARK_RADIUS,
                                      outline="#00ff88", width=2)
         if self.position_px and self.heading_px:
-            ca = self._image_to_canvas(*self.position_px)
-            cb = self._image_to_canvas(*self.heading_px)
-            self.canvas.create_line(*ca, *cb, fill="#ffaa00", width=2, arrow=tk.LAST)
+            self.canvas.create_line(*self.position_px, *self.heading_px, fill="#ffaa00", width=2, arrow=tk.LAST)
 
 
 class PoseAnalyzer(tk.Tk):
@@ -192,19 +188,32 @@ class PoseAnalyzer(tk.Tk):
             self._open_video(path)
 
     # ---------- calibration ----------
-    def _load_lens_calibration(self, lens_calib_path: str | None) -> LensCalibration | None:
-        if not lens_calib_path:
-            return None
-        try:
-            return LensCalibration.load(lens_calib_path)
-        except (OSError, ValueError, KeyError) as e:
-            messagebox.showwarning(
-                "No lens calibration",
-                f"Could not load {lens_calib_path} ({e}).\n"
-                "Continuing without fisheye undistortion -- marks will be off if calibration.json "
-                "was built from an undistorted reference image. Run lens_calib.py first if needed.",
-            )
-            return None
+    def _load_lens_calibration(self, lens_calib_path: str | None) -> LensCalibration:
+        """Lens calibration is mandatory: calibration.json is built from an
+        undistorted reference image, so marking un-corrected frames against
+        it would be systematically wrong. Keep prompting for a valid file
+        rather than silently continuing without one."""
+        path = lens_calib_path
+        first = True
+        while True:
+            if path:
+                try:
+                    return LensCalibration.load(path)
+                except (OSError, ValueError, KeyError) as e:
+                    messagebox.showerror("Invalid lens calibration", f"Could not load {path}:\n{e}")
+            elif first:
+                messagebox.showwarning(
+                    "Lens calibration required",
+                    "This tool requires a lens calibration (see lens_calib.py) so pixel clicks match "
+                    "the undistorted image calibration.json was built from.\n\n"
+                    "Please select your lens_calibration.json.",
+                )
+            first = False
+            path = filedialog.askopenfilename(title="Select lens_calibration.json", filetypes=[("JSON", "*.json")])
+            if not path:
+                messagebox.showerror("Lens calibration required", "A lens calibration file is required to continue.")
+                self.destroy()
+                raise SystemExit(0)
 
     def _load_calibration(self, calib_path: str) -> FieldCalibration | None:
         if os.path.isfile(calib_path):
@@ -266,7 +275,18 @@ class PoseAnalyzer(tk.Tk):
 
         results = ttk.Frame(self, padding=6)
         results.pack(fill="x")
-        self.results_text = tk.Text(results, height=6, font=("Consolas", 10), state="disabled")
+
+        turn_row = ttk.Frame(results)
+        turn_row.pack(fill="x", pady=(0, 4))
+        ttk.Label(turn_row, text="Turn direction:").pack(side="left")
+        self.turn_direction = tk.StringVar(value="auto")
+        for value, label in (("auto", "Auto (shortest path)"), ("left", "Left (CCW)"), ("right", "Right (CW)")):
+            ttk.Radiobutton(turn_row, text=label, value=value, variable=self.turn_direction,
+                             command=self.update_results).pack(side="left", padx=(6, 0))
+        ttk.Label(turn_row, text="  (resolves turns of more than 180 deg, which otherwise wrap to "
+                                  "their shortest-path equivalent)").pack(side="left")
+
+        self.results_text = tk.Text(results, height=9, font=("Consolas", 14), state="disabled")
         self.results_text.pack(fill="x")
         ttk.Button(results, text=f"Save result -> {self.results_path}", command=self.save_result).pack(
             anchor="e", pady=(4, 0))
@@ -286,8 +306,7 @@ class PoseAnalyzer(tk.Tk):
         ok, frame = self.cap.read()
         if not ok:
             return
-        if self.lens_calib is not None:
-            frame = self.lens_calib.undistort(frame)
+        frame = self.lens_calib.undistort(frame)
         self._current_frame = frame
         self._current_index = index
         t_ms = self.cap.get(cv2.CAP_PROP_POS_MSEC)
@@ -338,9 +357,12 @@ class PoseAnalyzer(tk.Tk):
         self._last_pose_b = pose_b
 
         if pose_a is not None and pose_b is not None:
-            k = kinematics_between(pose_a, self.panel_a.t, pose_b, self.panel_b.t)
+            k = kinematics_between(pose_a, self.panel_a.t, pose_b, self.panel_b.t, self.turn_direction.get())
             text.append("")
-            text.append(str(k))
+            text.append(f"dt={k.dt:.3f} s   distance={k.distance:.3f} m   "
+                         f"direction={math.degrees(k.direction):+.1f} deg")
+            text.append(f"velocity={k.velocity:.3f} m/s   "
+                         f"omega={math.degrees(k.omega):+.1f} deg/s  ({k.omega:+.4f} rad/s)")
             self._last_kinematics = k
         else:
             self._last_kinematics = None
@@ -364,7 +386,8 @@ class PoseAnalyzer(tk.Tk):
             "pose_a_x_m": pa.x, "pose_a_y_m": pa.y, "pose_a_heading_deg": math.degrees(pa.heading),
             "pose_b_x_m": pb.x, "pose_b_y_m": pb.y, "pose_b_heading_deg": math.degrees(pb.heading),
             "distance_m": k.distance, "direction_deg": math.degrees(k.direction),
-            "velocity_mps": k.velocity, "omega_deg_s": math.degrees(k.omega),
+            "velocity_mps": k.velocity, "turn_direction": self.turn_direction.get(),
+            "omega_deg_s": math.degrees(k.omega), "omega_rad_s": k.omega,
         }
         new_file = not os.path.isfile(self.results_path)
         with open(self.results_path, "a", newline="") as f:
@@ -383,8 +406,8 @@ def main(argv=None):
     parser.add_argument("-r", "--results", default="results.csv", help="CSV file to append saved results to")
     parser.add_argument("--lens-calibration", default="lens_calibration.json",
                          help="lens_calibration.json (see lens_calib.py) to undistort every frame before "
-                              "marking -- required for a fisheye/wide-FOV camera; must match the calibration "
-                              "used to build --calibration")
+                              "marking. Mandatory: if this file isn't found, a file picker opens to select "
+                              "it -- must match the calibration used to build --calibration")
     args = parser.parse_args(argv)
 
     video_path = args.video
