@@ -152,6 +152,7 @@ class PoseAnalyzer(tk.Tk):
         self.geometry("1300x900")
         self.results_path = results_path
         self.lens_calib = self._load_lens_calibration(lens_calib_path)
+        messagebox.showinfo(f'lense - {self.lens_calib}')
         self.cap: cv2.VideoCapture | None = None
         self.fps = 30.0
         self.frame_count = 0
@@ -194,8 +195,16 @@ class PoseAnalyzer(tk.Tk):
     # ---------- calibration ----------
     def _load_lens_calibration(self, lens_calib_path: str | None) -> LensCalibration | None:
         if not lens_calib_path:
-            return None
+            messagebox.showwarning(
+                "No lense calibration found",
+                f"Could not find {lens_calib_path}.\nPick a lens calibration.json , "
+                "or cancel to view with no lens calibration",
+            )
+            lens_calib_path = filedialog.askopenfilename(title="Select lense calibration.json", filetypes=[("JSON", "*.json")])
+            if not lens_calib_path:
+                return None
         try:
+            messagebox.showwarning(f'lens calib - {os.getcwd()} {lens_calib_path}')
             return LensCalibration.load(lens_calib_path)
         except (OSError, ValueError, KeyError) as e:
             messagebox.showwarning(
@@ -395,7 +404,10 @@ def main(argv=None):
         root.destroy()
         if not video_path:
             return
-
+    messagebox.showinfo('Starting pose')
+    print('starting pose')
+    print(args)
+    print(os.getcwd())
     PoseAnalyzer(video_path, args.calibration, args.results, args.lens_calibration).mainloop()
 
 
